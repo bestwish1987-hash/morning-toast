@@ -1,0 +1,40 @@
+name: 每日早安訊息
+
+on:
+  schedule:
+    - cron: '0 23 * * *'  # UTC 23:00 = 台灣時間 07:00
+  workflow_dispatch:
+
+jobs:
+  send-morning:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: 安裝 Canvas 系統依賴 + 中文字型
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libcairo2-dev libpango1.0-dev libjpeg-dev libgif-dev librsvg2-dev \
+            fonts-noto-cjk fonts-noto-cjk-extra fonts-noto-color-emoji
+          fc-cache -fv
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: 發送早安訊息
+        env:
+          LINE_CHANNEL_ACCESS_TOKEN: ${{ secrets.LINE_CHANNEL_ACCESS_TOKEN }}
+          MORNING_GROUP_ID: ${{ secrets.MORNING_GROUP_ID }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          UNSPLASH_ACCESS_KEY: ${{ secrets.UNSPLASH_ACCESS_KEY }}
+          CLOUDINARY_CLOUD_NAME: ${{ secrets.CLOUDINARY_CLOUD_NAME }}
+          CLOUDINARY_API_KEY: ${{ secrets.CLOUDINARY_API_KEY }}
+          CLOUDINARY_API_SECRET: ${{ secrets.CLOUDINARY_API_SECRET }}
+        run: node send.js
