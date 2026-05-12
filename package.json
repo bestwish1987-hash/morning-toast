@@ -1,0 +1,34 @@
+{
+  "name": "morning-toast",
+  "version": "1.0.0",
+  "description": "🍞 每天自動發送 AI 生成的早安圖文卡片到 LINE 群組",
+  "main": "send.js",
+  "scripts": {
+    "send": "node send.js",
+    "start": "node send.js"
+  },
+  "keywords": [
+    "line-bot",
+    "morning",
+    "claude",
+    "ai",
+    "automation",
+    "github-actions"
+  ],
+  "author": "",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/YOUR_USERNAME/morning-toast.git"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.27.0",
+    "axios": "^1.7.0",
+    "canvas": "^2.11.2",
+    "cloudinary": "^2.5.0",
+    "dotenv": "^16.4.5"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}

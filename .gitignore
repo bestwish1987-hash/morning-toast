@@ -1,0 +1,30 @@
+# 依賴
+node_modules/
+package-lock.json
+
+# 環境變數 (絕對不要 commit!)
+.env
+.env.local
+.env.*.local
+
+# 本地測試輸出
+*.jpg
+*.jpeg
+*.png
+!docs/screenshot.png
+!docs/*.png
+test-output/
+
+# Log
+*.log
+npm-debug.log*
+
+# 編輯器
+.vscode/
+.idea/
+*.swp
+.DS_Store
+
+# 暫存
+tmp/
+temp/
