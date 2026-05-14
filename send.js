@@ -67,18 +67,18 @@ const STYLES = {
   },
   illustration: {
     label: '🎨 插畫',
-    enhance: 'fine art museum painting masterpiece',
+    enhance: 'fine art painting bright vibrant colorful',
     keywords: [
-      'monet impressionist water lilies',     // 莫內名作
-      'van gogh starry night style',          // 梵谷風
-      'hokusai great wave japanese',          // 葛飾北齋浮世繪
-      'classical oil painting landscape gold frame', // 古典油畫
-      'renaissance painting museum',          // 文藝復興
-      'art nouveau alphonse mucha',           // 慕夏新藝術
-      'turner romantic painting sunset',      // 透納
-      'klimt golden painting',                // 克林姆
-      'studio ghibli watercolor background',  // 吉卜力風背景
-      'pixar concept art painting',           // 皮克斯概念畫
+      'monet impressionist water lilies',         // 莫內睡蓮(色彩明亮)
+      'sunflower oil painting van gogh',          // 梵谷向日葵(換掉星空)
+      'cherry blossom painting japan colorful',   // 櫻花畫作
+      'spring landscape painting bright',         // 春日風景畫
+      'pastel flower watercolor bright',          // 粉嫩水彩花
+      'colorful tulip oil painting',              // 鬱金香油畫
+      'art nouveau alphonse mucha colorful',      // 慕夏(本就鮮豔)
+      'studio ghibli watercolor sunny',           // 吉卜力風(加 sunny)
+      'pixar concept art bright colorful',        // 皮克斯(加 bright)
+      'monet garden giverny painting',            // 莫內花園
     ],
   },
   cute: {
