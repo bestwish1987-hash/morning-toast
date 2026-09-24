@@ -9,6 +9,7 @@
  *   --style  覆蓋譜上的曲風：pop folk bossa rock musicbox kids waltz（中文別名也可以）
  *   --lead   覆蓋主奏樂器：piano epiano guitar flute musicbox synth strings
  *   --chords / --bass / --pad  換伴奏樂器（--pad none 關掉鋪底）；頁面上的混音台也能隨時換
+ *   --library <資料夾>  把資料夾裡所有 .txt 當內建曲庫放進頁面（做「工作台」用），並預設打開編輯區
  */
 'use strict';
 const fs = require('fs');
@@ -22,6 +23,7 @@ function main(argv) {
     if (a.startsWith('--')) {
       const k = a.slice(2);
       if (k === 'check' || k === 'json' || k === 'help') args[k] = true;
+      else if (k === 'library' && (argv[i + 1] === undefined || argv[i + 1].startsWith('--'))) args[k] = path.join(__dirname, '..', 'examples');
       else args[k] = argv[++i];
     } else args._.push(a);
   }
@@ -63,8 +65,18 @@ function main(argv) {
   const bandSrc = fs.readFileSync(path.join(__dirname, 'band.js'), 'utf8');
   const safe = (s) => s.replace(/<\/script/gi, '<\\/script');
   const title = song.title || name;
+  let library = [];
+  if (args.library) {
+    const dir = path.resolve(args.library);
+    library = fs.readdirSync(dir).filter((f) => f.endsWith('.txt')).sort().map((f) => {
+      const t = fs.readFileSync(path.join(dir, f), 'utf8');
+      return { name: Band.parseSong(t).title || f.replace(/\.txt$/, ''), text: t };
+    });
+  }
   const html = template
     .split('__TITLE__').join(escapeHtml(title))
+    .replace('/*__LIBRARY__*/[]', () => safe(JSON.stringify(library)))
+    .replace('/*__OPEN_EDITOR__*/false', () => String(!!args.library))
     .replace('/*__BAND_JS__*/', () => safe(bandSrc))
     .replace('/*__SONG__*/""', () => safe(JSON.stringify(text)))
     .replace('/*__NAME__*/"song"', () => safe(JSON.stringify(name)));

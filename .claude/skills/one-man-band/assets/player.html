@@ -190,6 +190,13 @@
 
   <details class="card" id="editor">
     <summary>改譜、貼新的譜</summary>
+    <div class="row" id="library-row" hidden>
+      <label class="field" style="flex:1 1 200px">曲庫
+        <select id="library"></select>
+      </label>
+      <button class="small" id="lib-save">把目前的譜存進曲庫</button>
+      <button class="small" id="lib-delete" hidden>刪除這首</button>
+    </div>
     <textarea id="song-text" spellcheck="false" aria-label="簡譜"></textarea>
     <div class="actions">
       <button class="small" id="apply">套用</button>
@@ -220,6 +227,8 @@
   'use strict';
   const SONG_TEXT = /*__SONG__*/"";
   const SONG_NAME = /*__NAME__*/"song";
+  const LIBRARY = /*__LIBRARY__*/[];   // [{name, text}] 建置時用 --library 帶進來的內建曲庫
+  const OPEN_EDITOR = /*__OPEN_EDITOR__*/false;
   const $ = (id) => document.getElementById(id);
   const STORE_KEY = 'one-man-band:' + SONG_NAME;
 
@@ -574,6 +583,62 @@
     }
     btn.disabled = false;
   });
+
+  // ───────── 曲庫：內建範例 + 使用者自己存的（存在瀏覽器裡） ─────────
+  const LIB_KEY = STORE_KEY + ':library';
+  let saved = [];
+  try { saved = JSON.parse(localStorage.getItem(LIB_KEY) || '[]'); } catch (e) { saved = []; }
+  function saveLibrary() { try { localStorage.setItem(LIB_KEY, JSON.stringify(saved)); } catch (e) { /* 存不了就算了 */ } }
+  function renderLibrary(selectValue) {
+    const sel = $('library');
+    if (!LIBRARY.length && !saved.length) { $('library-row').hidden = true; return; }
+    $('library-row').hidden = false;
+    sel.innerHTML = '';
+    const add = (label, value, group) => { const o = document.createElement('option'); o.value = value; o.textContent = label; group.appendChild(o); };
+    const g1 = document.createElement('optgroup'); g1.label = '內建';
+    LIBRARY.forEach((it, i) => add(it.name, 'b' + i, g1));
+    sel.appendChild(g1);
+    if (saved.length) { const g2 = document.createElement('optgroup'); g2.label = '我存的'; saved.forEach((it, i) => add(it.name, 's' + i, g2)); sel.appendChild(g2); }
+    if (selectValue) sel.value = selectValue;
+    $('lib-delete').hidden = !(sel.value && sel.value[0] === 's');
+  }
+  function loadText(text) {
+    songText = text;
+    try { localStorage.setItem(STORE_KEY, text); } catch (e) { /* 沒有儲存空間 */ }
+    state.style = null; state.lead = null; state.tempo = null; state.transpose = 0;
+    stop();
+    rebuild(false);
+  }
+  $('library').addEventListener('change', (e) => {
+    const v = e.target.value;
+    const it = v[0] === 'b' ? LIBRARY[+v.slice(1)] : saved[+v.slice(1)];
+    if (!it) return;
+    loadText(it.text);
+    $('lib-delete').hidden = v[0] !== 's';
+    $('edit-status').textContent = `已載入「${it.name}」`; $('edit-status').className = 'status ok';
+  });
+  $('lib-save').addEventListener('click', () => {
+    const text = $('song-text').value;
+    const parsed = Band.parseSong(text);
+    if (!parsed.bars.length) { $('edit-status').textContent = '沒讀到任何音符，先檢查譜'; $('edit-status').className = 'status warn'; return; }
+    const name = parsed.title || `未命名 ${saved.length + 1}`;
+    const idx = saved.findIndex((x) => x.name === name);
+    if (idx >= 0) saved[idx].text = text; else saved.push({ name, text });
+    saveLibrary();
+    loadText(text);
+    renderLibrary('s' + (idx >= 0 ? idx : saved.length - 1));
+    $('edit-status').textContent = `已存成「${name}」（存在這個瀏覽器裡）`; $('edit-status').className = 'status ok';
+  });
+  $('lib-delete').addEventListener('click', () => {
+    const v = $('library').value;
+    if (v[0] !== 's') return;
+    const [it] = saved.splice(+v.slice(1), 1);
+    saveLibrary();
+    renderLibrary(LIBRARY.length ? 'b0' : null);
+    $('edit-status').textContent = `已刪除「${it.name}」`; $('edit-status').className = 'status';
+  });
+  renderLibrary();
+  if (OPEN_EDITOR) $('editor').open = true;
 
   rebuild(false);
   window.__band = { get song() { return song; }, get arr() { return arr; }, play, stop, state };
