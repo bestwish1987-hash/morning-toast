@@ -297,14 +297,16 @@
     };
     const cands = minor
       ? [mk(5, 'm', 0.45, 'I'), mk(1, 'm', 0.15, 'IV'), mk(2, '', 0.3, 'V'), mk(3, '', 0.15, 'VI'), mk(0, '', 0.12, 'III'), mk(4, '', 0.05, 'VII')]
-      : [mk(0, '', 0.45, 'I'), mk(3, '', 0.3, 'IV'), mk(4, '', 0.35, 'V'), mk(5, 'm', 0.1, 'vi'), mk(1, 'm', 0, 'ii'), mk(2, 'm', -0.1, 'iii')];
+      : [mk(0, '', 0.45, 'I'), mk(3, '', 0.3, 'IV'), mk(4, '', 0.35, 'V'), mk(5, 'm', 0.2, 'vi'), mk(1, 'm', 0, 'ii'), mk(2, 'm', -0.1, 'iii')];
 
     const n = song.bars.length;
-    let prev = null;
+    // run 記錄同一個和弦已經連續幾個小節：第三小節起扣分，旋律兩個都合時就會換一個，不會一路 C 到底
+    let prev = null, run = 0;
+    const advance = (c) => { run = prev && c.symbol === prev.symbol ? run + 1 : 0; prev = c; };
     song.bars.forEach((bar, i) => {
-      if (bar.chords.length) { prev = bar.chords[bar.chords.length - 1].chord; return; }
+      if (bar.chords.length) { advance(bar.chords[bar.chords.length - 1].chord); return; }
       const notes = bar.notes.filter((x) => !x.rest);
-      if (!notes.length) { bar.chords.push({ beat: 0, chord: prev || cands[0], auto: true }); return; }
+      if (!notes.length) { const c = prev || cands[0]; bar.chords.push({ beat: 0, chord: c, auto: true }); advance(c); return; }
 
       const weightOf = (note) => {
         const pos = note.start - bar.start;
@@ -320,7 +322,7 @@
           s += cand.pcs.includes(pc) ? w : -0.4 * w;
         }
         s += cand.prior;
-        if (prev && cand.symbol === prev.symbol) s += 0.1;
+        if (prev && cand.symbol === prev.symbol) s += run >= 1 ? -0.35 : 0.1;
         if (ctx.first && cand.role === 'I') s += 0.8;
         if (ctx.last && cand.role === 'I') s += 2;
         if (ctx.penult && cand.role === 'V') s += 0.7;
@@ -350,7 +352,8 @@
         }
       }
       bar.chords = chosen;
-      prev = chosen[chosen.length - 1].chord;
+      if (chosen.length === 2) advance(chosen[0].chord);
+      advance(chosen[chosen.length - 1].chord);
     });
     return song;
   }
