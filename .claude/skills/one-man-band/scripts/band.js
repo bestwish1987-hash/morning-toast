@@ -543,6 +543,28 @@
   }
 
   // ───────────────────────── 編曲 ─────────────────────────
+  // ───────────────────────── 混音 ─────────────────────────
+  // 每軌：volume 音量、pan 左右（-1 左 … 1 右）、tone 音色（-1 暗 … 1 亮）、reverb 殘響量（0 … 1）
+  const DEFAULT_MIX = {
+    lead: { volume: 1, pan: 0.08, tone: 0, reverb: 0.5, mute: false },
+    chords: { volume: 0.7, pan: -0.3, tone: 0, reverb: 0.6, mute: false },
+    bass: { volume: 0.85, pan: 0, tone: 0, reverb: 0.15, mute: false },
+    pad: { volume: 0.45, pan: 0.3, tone: -0.2, reverb: 0.9, mute: false },
+    drums: { volume: 0.8, pan: 0, tone: 0, reverb: 0.35, mute: false },
+    layer: { volume: 0.55, pan: -0.15, tone: 0, reverb: 0.6, mute: false },
+  };
+  // 母帶預設：low/high 是 dB，hp/lp 是 Hz，threshold/ratio 給總壓縮器，reverbMul 乘在曲風的殘響量上
+  const MASTER_PRESETS = {
+    natural: { label: '原味', low: 0, high: 0, hp: 20, lp: 20000, threshold: -16, ratio: 4, reverbMul: 1 },
+    warm: { label: '溫暖', low: 3, high: -2.5, hp: 20, lp: 9000, threshold: -16, ratio: 4, reverbMul: 1.1 },
+    bright: { label: '明亮', low: -1, high: 3.5, hp: 40, lp: 20000, threshold: -16, ratio: 4, reverbMul: 0.9 },
+    lofi: { label: 'Lo-fi', low: 2, high: -6, hp: 120, lp: 3200, threshold: -24, ratio: 8, reverbMul: 0.6 },
+    radio: { label: '廣播', low: 0, high: 2, hp: 350, lp: 4500, threshold: -28, ratio: 12, reverbMul: 0.4 },
+    hall: { label: '大場地', low: 1, high: 1, hp: 20, lp: 20000, threshold: -16, ratio: 4, reverbMul: 2.2 },
+  };
+  // 鼓組裡幾個小件放到左右，不然整組鼓擠在中間
+  const DRUM_PAN = { 42: 0.25, 46: 0.25, 70: -0.3, 54: -0.2, 37: 0.15, 51: 0.3, 49: -0.2 };
+
   const DRUM_NOTE = { k: 36, s: 38, r: 37, c: 39, h: 42, o: 46, m: 70, t: 54, C: 49, R: 51 };
   const DRUM_LABEL = { k: '大鼓', s: '小鼓', r: '鼓邊', c: '拍手', h: 'Hi-hat', o: '開鈸', m: '沙鈴', t: '鈴鼓', C: '碎音鈸', R: 'Ride' };
 
@@ -573,6 +595,24 @@
     return root;
   }
 
+  // 各軌可以挑的樂器
+  const CHORD_CHOICES = ['piano', 'epiano', 'guitar', 'musicbox', 'synth', 'strings'];
+  const BASS_CHOICES = ['bass', 'synth', 'musicbox', 'piano'];
+  const PAD_CHOICES = ['pad', 'strings'];
+  // 加軌用的和弦節奏型
+  const LAYER_PATTERNS = {
+    arp: { label: '琶音', type: 'arp', step: 2, len: 5, order: [0, 1, 2, 3, 2, 1, 2, 3] },
+    arp16: { label: '快琶音', type: 'arp', step: 1, len: 3, order: [0, 1, 2, 3, 2, 1] },
+    block: { label: '每拍齊奏', type: 'block', hits: [[0, 4], [4, 4], [8, 4], [12, 4], [16, 4], [20, 4]] },
+    offbeat: { label: '反拍', type: 'block', hits: [[2, 2], [6, 2], [10, 2], [14, 2], [18, 2], [22, 2]] },
+    strum: { label: '刷弦', type: 'strum', hits: [[0, 4, 'd'], [4, 2, 'd'], [6, 4, 'u'], [10, 2, 'u'], [12, 2, 'd'], [14, 2, 'u'], [16, 4, 'd'], [20, 4, 'd']] },
+    sustain: { label: '長音', type: 'sustain' },
+  };
+
+  // opts:
+  //   style, lead, transpose, tempo
+  //   instruments: { chords: 'guitar', bass: 'bass', pad: 'strings' | null }   換伴奏樂器；pad 給 null 就關掉鋪底
+  //   layers: [{ role: 'lead' | 'chords', inst: 'strings', octave: -1 | 0 | 1, pattern: 'arp' | ... }]   疊上去的額外音軌
   function arrange(song, opts) {
     opts = opts || {};
     const styleId = resolveStyle(opts.style || song.style, song.meter);
@@ -581,17 +621,32 @@
     const leadId = resolveInstrument(opts.lead || song.lead, style.lead);
     const den = song.meter.den;
     const tempo = opts.tempo || song.tempo || Math.round(style.tempo * den / 4);
-    const leadShift = INSTRUMENTS[leadId].octave || 0;
-    const chordShift = INSTRUMENTS[style.chord].octave || 0;
-    const bassShift = style.bass === 'musicbox' ? 12 : 0;
+    const insts = opts.instruments || {};
+    const chordInst = INSTRUMENTS[insts.chords] ? insts.chords : style.chord;
+    const bassInst = INSTRUMENTS[insts.bass] ? insts.bass : style.bass;
+    const padInst = insts.pad === null || insts.pad === 'none' ? null : (INSTRUMENTS[insts.pad] ? insts.pad : style.pad);
+    const octaveOf = (inst) => INSTRUMENTS[inst].octave || 0;
+    const leadShift = octaveOf(leadId);
+    const bassShift = bassInst === 'musicbox' ? 12 : bassInst === 'piano' ? 0 : 0;
 
+    const mk = (id, name, inst, channel, volume) => ({ id, name, inst, channel, volume, events: [], mix: Object.assign({}, DEFAULT_MIX[id] || DEFAULT_MIX.layer, { volume }) });
     const tracks = {
-      lead: { id: 'lead', name: '主旋律', inst: leadId, channel: 0, volume: 1.0, events: [] },
-      chords: { id: 'chords', name: '和弦', inst: style.chord, channel: 1, volume: 0.7, events: [] },
-      bass: { id: 'bass', name: '貝斯', inst: style.bass, channel: 2, volume: 0.85, events: [] },
-      pad: { id: 'pad', name: '鋪底', inst: style.pad || 'pad', channel: 3, volume: 0.45, events: [] },
-      drums: { id: 'drums', name: '鼓', inst: 'drums', channel: 9, volume: 0.8, events: [] },
+      lead: mk('lead', '主旋律', leadId, 0, 1.0),
+      chords: mk('chords', '和弦', chordInst, 1, 0.7),
+      bass: mk('bass', '貝斯', bassInst, 2, 0.85),
+      pad: mk('pad', '鋪底', padInst || 'pad', 3, 0.45),
+      drums: mk('drums', '鼓', 'drums', 9, 0.8),
     };
+    const layers = (opts.layers || []).filter((l) => l && INSTRUMENTS[l.inst]).map((l, i) => {
+      const id = 'layer' + (i + 1);
+      const inst = l.inst;
+      const role = l.role === 'lead' ? 'lead' : 'chords';
+      const pattern = LAYER_PATTERNS[l.pattern] || (role === 'lead' ? null : LAYER_PATTERNS.block);
+      const label = `${role === 'lead' ? '疊旋律' : pattern.label}·${INSTRUMENTS[inst].label}`;
+      tracks[id] = mk(id, label, inst, 4 + i + (4 + i >= 9 ? 1 : 0), 0.55);
+      tracks[id].layer = { role, inst, octave: l.octave || 0, pattern: l.pattern || (role === 'lead' ? null : 'block') };
+      return { id, role, inst, shift: octaveOf(inst) + 12 * (l.octave || 0), pattern };
+    });
 
     // 主旋律：同音反覆之間留一點空隙，聽起來才有「彈」的感覺
     const leadNotes = [];
@@ -600,7 +655,10 @@
       const gap = Math.min(0.12, note.beats * 0.15);
       const onDown = Math.abs(note.start - bar.start) < 1e-6;
       leadNotes.push(note);
-      tracks.lead.events.push({ t: note.start, dur: note.beats - gap, note: midiOf(note, song, transpose) + leadShift, vel: onDown ? 0.95 : 0.82, ref: leadNotes.length - 1 });
+      const base = { t: note.start, dur: note.beats - gap, vel: onDown ? 0.95 : 0.82, ref: leadNotes.length - 1 };
+      const midi = midiOf(note, song, transpose);
+      tracks.lead.events.push(Object.assign({ note: midi + leadShift }, base));
+      for (const ly of layers) if (ly.role === 'lead') tracks[ly.id].events.push(Object.assign({}, base, { note: midi + ly.shift, vel: base.vel * 0.8 }));
     }));
 
     // 和弦區段：每個小節裡（含前一小節延續）哪一拍起用什麼和弦
@@ -623,6 +681,41 @@
       return found;
     };
 
+    // 和弦類音軌：主和弦軌用曲風的節奏型，加軌用自己選的
+    const chordTracks = [{ id: 'chords', shift: octaveOf(chordInst), pattern: null }]
+      .concat(layers.filter((l) => l.role === 'chords' && l.pattern.type !== 'sustain').map((l) => ({ id: l.id, shift: l.shift, pattern: l.pattern })));
+    const sustainTracks = (padInst ? [{ id: 'pad', shift: 0 }] : [])
+      .concat(layers.filter((l) => l.role === 'chords' && l.pattern.type === 'sustain').map((l) => ({ id: l.id, shift: l.shift })));
+
+    const genChords = (trackId, cp, shift, bar, steps, tAt) => {
+      const push = (ev) => tracks[trackId].events.push(ev);
+      if (cp.type === 'arp') {
+        let k = 0;
+        for (let s = 0; s < steps; s += cp.step) {
+          const chord = chordAt(tAt(s));
+          if (!chord) continue;
+          const v = voicing(chord, 'arp');
+          const idx = cp.order[k % cp.order.length];
+          push({ t: tAt(s), dur: cp.len / 4, note: v[idx % v.length] + shift + transpose, vel: s % 4 === 0 ? 0.75 : 0.6 });
+          k++;
+        }
+        return;
+      }
+      for (const hit of cp.hits) {
+        const [step, len, dir] = hit;
+        if (step >= steps) continue;
+        const chord = chordAt(tAt(step));
+        if (!chord) continue;
+        const dur = Math.min(len, steps - step) / 4;
+        let v = voicing(chord, cp.type);
+        if (cp.type === 'strum' && dir === 'u') v = v.slice(2).reverse();
+        v.forEach((nn, i) => push({
+          t: tAt(step), off: cp.type === 'strum' ? i * 0.014 : 0, dur,
+          note: nn + shift + transpose, vel: (step % 4 === 0 ? 0.78 : 0.62) * (cp.type === 'power' ? 0.9 : 1),
+        }));
+      }
+    };
+
     const n = song.bars.length;
     let firstFull = true;
     song.bars.forEach((bar, bi) => {
@@ -638,9 +731,9 @@
         // 結尾：一個長和弦收掉，鼓敲一下碎音鈸
         const chord = chordAt(bar.start);
         if (chord) {
-          voicing(chord, 'block').forEach((nn) => push('chords', { t: bar.start, dur: bar.beats, note: nn + chordShift + transpose, vel: 0.8 }));
+          for (const ct of chordTracks) voicing(chord, 'block').forEach((nn) => push(ct.id, { t: bar.start, dur: bar.beats, note: nn + ct.shift + transpose, vel: 0.8 }));
           push('bass', { t: bar.start, dur: bar.beats, note: bassNote(chord, 'r') + bassShift + transpose, vel: 0.9 });
-          if (style.pad) voicing(chord, 'sustain').forEach((nn) => push('pad', { t: bar.start, dur: bar.beats, note: nn + transpose, vel: 0.6 }));
+          for (const st of sustainTracks) voicing(chord, 'sustain').forEach((nn) => push(st.id, { t: bar.start, dur: bar.beats, note: nn + st.shift + transpose, vel: 0.6 }));
         }
         if (style.drums) { push('drums', { t: bar.start, dur: 1, note: DRUM_NOTE.C, vel: 0.8 }); push('drums', { t: bar.start, dur: 0.5, note: DRUM_NOTE.k, vel: 1 }); }
         return;
@@ -670,49 +763,26 @@
         push('bass', { t: tAt(step), dur: dur * 0.95, note: bassNote(chord, which) + bassShift + transpose, vel: step === 0 ? 0.95 : 0.8 });
       }
 
-      // 和弦樂器
-      const cp = pat.chord;
-      if (cp.type === 'arp') {
-        let k = 0;
-        for (let s = 0; s < steps; s += cp.step) {
-          const chord = chordAt(tAt(s));
-          if (!chord) continue;
-          const v = voicing(chord, 'arp');
-          const idx = cp.order[k % cp.order.length];
-          push('chords', { t: tAt(s), dur: cp.len / 4, note: v[idx % v.length] + chordShift + transpose, vel: s % 4 === 0 ? 0.75 : 0.6 });
-          k++;
-        }
-      } else {
-        for (const hit of cp.hits) {
-          const [step, len, dir] = hit;
-          if (step >= steps) continue;
-          const chord = chordAt(tAt(step));
-          if (!chord) continue;
-          const dur = Math.min(len, steps - step) / 4;
-          let v = voicing(chord, cp.type);
-          if (cp.type === 'strum' && dir === 'u') v = v.slice(2).reverse();
-          v.forEach((nn, i) => push('chords', {
-            t: tAt(step), off: cp.type === 'strum' ? i * 0.014 : 0, dur,
-            note: nn + chordShift + transpose, vel: (step % 4 === 0 ? 0.78 : 0.62) * (cp.type === 'power' ? 0.9 : 1),
-          }));
-        }
-      }
+      // 和弦樂器（主軌 + 加軌）
+      for (const ct of chordTracks) genChords(ct.id, ct.pattern || pat.chord, ct.shift, bar, steps, tAt);
     });
 
-    // 鋪底：跟著和弦區段長音
-    if (style.pad) {
+    // 鋪底、長音加軌：跟著和弦區段長音
+    if (sustainTracks.length) {
       const lastBar = song.bars[n - 1];
       for (const seg of segments) {
         if (seg.bar.pickup && seg.bar.index === 0) continue;
         if (seg.bar === lastBar) continue;
-        voicing(seg.chord, 'sustain').forEach((nn) => tracks.pad.events.push({ t: seg.start, dur: seg.end - seg.start, note: nn + transpose, vel: 0.55 }));
+        for (const st of sustainTracks) voicing(seg.chord, 'sustain').forEach((nn) => tracks[st.id].events.push({ t: seg.start, dur: seg.end - seg.start, note: nn + st.shift + transpose, vel: 0.55 }));
       }
     }
 
-    const list = ['lead', 'chords', 'bass', 'pad', 'drums'].map((id) => tracks[id]).filter((t) => t.events.length);
+    const order = ['lead', 'chords', 'bass', 'pad', 'drums'].concat(layers.map((l) => l.id));
+    const list = order.map((id) => tracks[id]).filter((t) => t && t.events.length);
     list.forEach((t) => t.events.sort((a, b) => a.t - b.t));
     return {
       style: styleId, styleLabel: style.label, lead: leadId, tempo, transpose, reverb: style.reverb,
+      instruments: { chords: chordInst, bass: bassInst, pad: padInst },
       totalBeats: song.totalBeats, segments, tracks: list, leadNotes,
       keyName: keyName(song.key, transpose),
     };
@@ -727,7 +797,7 @@
   const strBytes = (s) => Array.from(new TextEncoder().encode(s));
   const sharpsOf = (pc) => { const t = [0, -5, 2, -3, 4, -1, 6, 1, -4, 3, -2, 5][mod12(pc)]; return t; };
 
-  function toMidi(arr, song) {
+  function toMidi(arr, song, mix) {
     const den = song.meter.den;
     const tpq = 480;
     const ticksPerBeat = Math.round(tpq * 4 / den);
@@ -764,7 +834,9 @@
       const name = strBytes(`${tr.name} (${INSTRUMENTS[tr.inst].label})`);
       evs.push({ tick: 0, order: 0, data: [0xff, 0x03, ...varLen(name.length), ...name] });
       if (ch !== 9) evs.push({ tick: 0, order: 1, data: [0xc0 | ch, INSTRUMENTS[tr.inst].gm] });
-      evs.push({ tick: 0, order: 2, data: [0xb0 | ch, 7, Math.round(clamp(tr.volume, 0, 1) * 127)] });
+      const mp = trackParams(tr, mix);
+      evs.push({ tick: 0, order: 2, data: [0xb0 | ch, 7, Math.round(clamp(mp.volume, 0, 1) * 127)] });
+      evs.push({ tick: 0, order: 2, data: [0xb0 | ch, 10, Math.round(clamp((mp.pan + 1) / 2, 0, 1) * 127)] });
       for (const e of tr.events) {
         const on = tick(e.t) + (e.off ? secToTicks(e.off) : 0);
         const dur = Math.max(1, tick(e.dur));
@@ -802,38 +874,68 @@
     constructor(ctx, opts) {
       opts = opts || {};
       this.ctx = ctx;
+      // 母帶鏈：各軌 → master → 低/高架 EQ → 高通/低通 → 壓縮 → 限幅 → 喇叭
       this.master = ctx.createGain();
       this.master.gain.value = opts.volume == null ? 0.6 : opts.volume;
+      this.eqLow = ctx.createBiquadFilter(); this.eqLow.type = 'lowshelf'; this.eqLow.frequency.value = 200;
+      this.eqHigh = ctx.createBiquadFilter(); this.eqHigh.type = 'highshelf'; this.eqHigh.frequency.value = 4000;
+      this.hp = ctx.createBiquadFilter(); this.hp.type = 'highpass'; this.hp.frequency.value = 20; this.hp.Q.value = 0.6;
+      this.lp = ctx.createBiquadFilter(); this.lp.type = 'lowpass'; this.lp.frequency.value = 20000; this.lp.Q.value = 0.6;
       this.comp = ctx.createDynamicsCompressor();
       this.comp.threshold.value = -16; this.comp.knee.value = 18; this.comp.ratio.value = 4;
       this.comp.attack.value = 0.004; this.comp.release.value = 0.16;
-      this.master.connect(this.comp);
-      this.comp.connect(ctx.destination);
+      this.limiter = ctx.createDynamicsCompressor();
+      this.limiter.threshold.value = -2; this.limiter.knee.value = 0; this.limiter.ratio.value = 20;
+      this.limiter.attack.value = 0.001; this.limiter.release.value = 0.08;
+      this.master.connect(this.eqLow); this.eqLow.connect(this.eqHigh); this.eqHigh.connect(this.hp); this.hp.connect(this.lp);
+      this.lp.connect(this.comp); this.comp.connect(this.limiter); this.limiter.connect(ctx.destination);
       this.reverb = ctx.createConvolver();
       this.reverb.buffer = makeImpulse(ctx, 1.8, 2.6);
+      this.baseReverb = opts.reverb == null ? 0.22 : opts.reverb;
       this.reverbGain = ctx.createGain();
-      this.reverbGain.gain.value = opts.reverb == null ? 0.22 : opts.reverb;
+      this.reverbGain.gain.value = this.baseReverb;
       this.reverb.connect(this.reverbGain);
-      this.reverbGain.connect(this.comp);
+      this.reverbGain.connect(this.master);
       this.noise = makeNoise(ctx, 1.5);
       this.tracks = {};
-      this.dryMax = 0;
+      this.drumPans = {};
+      this.setMaster(opts.master || 'natural');
     }
-    setReverb(v) { this.reverbGain.gain.value = v; }
-    track(id, volume) {
+    setMaster(presetId) {
+      const p = MASTER_PRESETS[presetId] || MASTER_PRESETS.natural;
+      const t = this.ctx.currentTime, k = 0.03;
+      this.eqLow.gain.setTargetAtTime(p.low, t, k); this.eqHigh.gain.setTargetAtTime(p.high, t, k);
+      this.hp.frequency.setTargetAtTime(p.hp, t, k); this.lp.frequency.setTargetAtTime(p.lp, t, k);
+      this.comp.threshold.setTargetAtTime(p.threshold, t, k); this.comp.ratio.setTargetAtTime(p.ratio, t, k);
+      this.reverbGain.gain.setTargetAtTime(this.baseReverb * p.reverbMul, t, k);
+    }
+    // 每軌：gain → 低架/高架（音色）→ 左右 → master，另外從左右之後送一份去殘響
+    track(id, params) {
       if (!this.tracks[id]) {
-        const g = this.ctx.createGain();
-        g.gain.value = volume == null ? 1 : volume;
-        g.connect(this.master);
-        const send = this.ctx.createGain();
-        send.gain.value = id === 'drums' ? 0.5 : id === 'bass' ? 0.25 : 1;
-        g.connect(send);
-        send.connect(this.reverb);
-        this.tracks[id] = g;
+        const ctx = this.ctx;
+        const gain = ctx.createGain();
+        const low = ctx.createBiquadFilter(); low.type = 'lowshelf'; low.frequency.value = 250;
+        const high = ctx.createBiquadFilter(); high.type = 'highshelf'; high.frequency.value = 3500;
+        const pan = ctx.createStereoPanner ? ctx.createStereoPanner() : null;
+        const send = ctx.createGain();
+        gain.connect(low); low.connect(high);
+        const out = pan || high;
+        if (pan) high.connect(pan);
+        out.connect(this.master); out.connect(send); send.connect(this.reverb);
+        this.tracks[id] = { gain, low, high, pan, send, input: gain };
       }
-      return this.tracks[id];
+      if (params) this.setTrack(id, params);
+      return this.tracks[id].input;
     }
-    setVolume(id, v) { const g = this.track(id); g.gain.setTargetAtTime(v, this.ctx.currentTime, 0.02); }
+    setTrack(id, p) {
+      const n = this.tracks[id] || (this.track(id), this.tracks[id]);
+      const t = this.ctx.currentTime, k = 0.02;
+      if (p.volume != null || p.mute != null) n.gain.gain.setTargetAtTime(p.mute ? 0 : (p.volume == null ? 1 : p.volume), t, k);
+      if (p.tone != null) { n.low.gain.setTargetAtTime(-p.tone * 6, t, k); n.high.gain.setTargetAtTime(p.tone * 6, t, k); }
+      if (p.pan != null && n.pan) n.pan.pan.setTargetAtTime(clamp(p.pan, -1, 1), t, k);
+      if (p.reverb != null) n.send.gain.setTargetAtTime(clamp(p.reverb, 0, 1) * 1.2, t, k);
+    }
+    setVolume(id, v) { this.setTrack(id, { volume: v }); }
 
     play(inst, note, t, dur, vel, dest) {
       dest = dest || this.master;
@@ -960,6 +1062,11 @@
     }
     drum(note, t, vel, dest) {
       const v = clamp(vel, 0, 1);
+      if (DRUM_PAN[note] && this.ctx.createStereoPanner) {
+        const key = note + ':' + (dest === this.master ? 'm' : 'd');
+        if (!this.drumPans[key]) { const p = this.ctx.createStereoPanner(); p.pan.value = DRUM_PAN[note]; p.connect(dest); this.drumPans[key] = p; }
+        dest = this.drumPans[key];
+      }
       switch (note) {
         case 36: this.tone(dest, t, 'sine', 170, 48, 0.95 * v, 0.13, 0.5); this.noiseBurst(dest, t, 0.03, 0.25 * v, ['lowpass', 2500, 0.5], 0.008); break;
         case 38: this.noiseBurst(dest, t, 0.35, 0.5 * v, ['bandpass', 1700, 0.7], 0.07); this.tone(dest, t, 'triangle', 200, 170, 0.35 * v, 0.05, 0.25); break;
@@ -977,24 +1084,41 @@
   }
 
   // 把整首排好的曲子在給定的 AudioContext 上排程（播放和離線輸出共用）
-  function scheduleAll(synth, arr, startTime, mutes, volumes) {
+  // mix = { tracks: { lead: {volume, pan, tone, reverb, mute}, ... }, master: 'natural' }；沒給的欄位用編曲的預設
+  function trackParams(tr, mix) { return Object.assign({}, tr.mix, mix && mix.tracks && mix.tracks[tr.id]); }
+
+  function scheduleAll(synth, arr, startTime, mix, only) {
     const spb = 60 / arr.tempo;
+    synth.setMaster(mix && mix.master);
     for (const tr of arr.tracks) {
-      if (mutes && mutes[tr.id]) continue;
-      const dest = synth.track(tr.id, volumes && volumes[tr.id] != null ? volumes[tr.id] : tr.volume);
+      const p = trackParams(tr, mix);
+      if (only ? tr.id !== only : p.mute) continue;
+      if (only) p.mute = false;
+      const dest = synth.track(tr.id, p);
       for (const e of tr.events) synth.play(tr.inst, e.note, startTime + e.t * spb + (e.off || 0), e.dur * spb, e.vel, dest);
     }
   }
 
-  async function renderWav(arr, mutes, volumes) {
+  async function renderWav(arr, mix, only) {
     const spb = 60 / arr.tempo;
     const rate = 44100;
     const seconds = arr.totalBeats * spb + 2.5;
     const ctx = new OfflineAudioContext(2, Math.ceil(seconds * rate), rate);
     const synth = new Synth(ctx, { reverb: arr.reverb });
-    scheduleAll(synth, arr, 0.05, mutes, volumes);
+    scheduleAll(synth, arr, 0.05, mix, only);
     const buf = await ctx.startRendering();
     return encodeWav(buf);
+  }
+
+  // 分軌：每軌各自過同一條母帶鏈輸出一個 WAV
+  async function renderStems(arr, mix, onProgress) {
+    const out = [];
+    for (let i = 0; i < arr.tracks.length; i++) {
+      const tr = arr.tracks[i];
+      if (onProgress) onProgress(tr, i, arr.tracks.length);
+      out.push({ name: `${tr.id}-${tr.name}.wav`, data: await renderWav(arr, mix, tr.id) });
+    }
+    return out;
   }
 
   function encodeWav(buf) {
@@ -1051,8 +1175,8 @@
 
   return {
     parseKey, keyName, parseChord, parseSong, harmonize, arrange, toMidi, midiOf, noteGlyph,
-    Synth, scheduleAll, renderWav, encodeWav, makeZip,
-    STYLES, STYLE_ALIASES, INSTRUMENTS, INSTRUMENT_ALIASES, LEAD_CHOICES, DRUM_LABEL,
+    Synth, scheduleAll, renderWav, renderStems, encodeWav, makeZip, trackParams,
+    STYLES, STYLE_ALIASES, INSTRUMENTS, INSTRUMENT_ALIASES, LEAD_CHOICES, CHORD_CHOICES, BASS_CHOICES, PAD_CHOICES, LAYER_PATTERNS, DRUM_LABEL, DEFAULT_MIX, MASTER_PRESETS,
     resolveStyle, resolveInstrument,
   };
 });

@@ -81,12 +81,23 @@
   .warn { color: var(--warn); font-size: 13px; margin: 0; padding-left: 18px; }
   .hint { font-size: 12.5px; color: var(--muted); margin: 0; }
 
-  /* 混音 */
-  .mixer { display: grid; gap: 8px; }
-  .track { display: grid; grid-template-columns: 96px 1fr 62px; align-items: center; gap: 10px; }
-  .track .name { font-size: 14px; }
-  .track .name small { display: block; color: var(--muted); font-size: 11.5px; }
-  .track button.mute { justify-self: end; min-width: 56px; }
+  /* 混音台 */
+  .mixer { display: grid; gap: 10px; }
+  .track { display: grid; grid-template-columns: 1fr auto; gap: 6px 10px; padding: 10px 12px; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; }
+  .track .head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+  .track .name { font-size: 14px; font-weight: 700; }
+  .track .name small { color: var(--muted); font-weight: 400; font-size: 12px; margin-left: 6px; }
+  .track select { width: auto; padding: 4px 8px; font-size: 13px; }
+  .track .btns { display: flex; gap: 6px; align-self: start; }
+  .track .knobs { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 4px 14px; }
+  .track .knobs label { display: grid; grid-template-columns: 3.2em 1fr; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); }
+  .track .knobs input[type="range"] { margin: 4px 0; }
+  .track.muted { opacity: .55; }
+  .master { display: grid; gap: 8px; }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .chips button { font-size: 13px; padding: 5px 12px; border-radius: 999px; }
+  .addlayer { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; font-size: 13px; color: var(--muted); }
+  .addlayer select { width: auto; padding: 5px 8px; font-size: 13px; }
 
   /* 匯出、編輯 */
   .card { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 16px; display: grid; gap: 12px; }
@@ -146,8 +157,24 @@
   </section>
 
   <section>
-    <h2>樂器</h2>
+    <h2>混音台</h2>
     <div class="mixer" id="mixer"></div>
+    <div class="addlayer" style="margin-top:10px">
+      <span>加一軌：</span>
+      <select id="layer-role" aria-label="加軌角色"><option value="chords">和弦</option><option value="lead">跟著主旋律</option></select>
+      <select id="layer-inst" aria-label="加軌樂器"></select>
+      <select id="layer-pattern" aria-label="和弦節奏型"></select>
+      <select id="layer-oct" aria-label="八度"><option value="0">原八度</option><option value="-1">低八度</option><option value="1">高八度</option></select>
+      <button class="small" id="layer-add">＋ 加入</button>
+    </div>
+    <div class="master card" style="margin-top:14px">
+      <h2>母帶</h2>
+      <div class="chips" id="master-presets"></div>
+      <div class="row">
+        <button class="small" id="mix-reset">重設混音</button>
+        <span class="hint">預設會記在這個瀏覽器裡，換裝置不會帶過去。</span>
+      </div>
+    </div>
   </section>
 
   <section class="card">
@@ -155,9 +182,10 @@
     <div class="actions">
       <button class="small" id="dl-midi">下載 MIDI</button>
       <button class="small" id="dl-wav">錄成 WAV 音檔</button>
+      <button class="small" id="dl-stems">分軌匯出（每軌一個 WAV）</button>
     </div>
     <div class="status" id="dl-status"></div>
-    <p class="hint">MIDI 可以丟進 GarageBand、Logic、Cubase 換成真實音色；WAV 是這個頁面現在的聲音，可以直接上傳到 Suno 之類的服務再加人聲。</p>
+    <p class="hint">MIDI 可以丟進 GarageBand、Logic、Cubase 換成真實音色；WAV 是這個頁面現在的聲音（含混音台的設定）；分軌是每個樂器各一個檔，方便到編曲軟體裡自己混。</p>
   </section>
 
   <details class="card" id="editor">
@@ -195,7 +223,10 @@
   const $ = (id) => document.getElementById(id);
   const STORE_KEY = 'one-man-band:' + SONG_NAME;
 
-  const state = { style: null, lead: null, tempo: null, transpose: 0, loop: false, mutes: {}, volumes: {} };
+  const state = { style: null, lead: null, tempo: null, transpose: 0, loop: false, instruments: {}, layers: [], mix: { tracks: {}, master: 'natural' } };
+  const MIX_KEY = STORE_KEY + ':mix';
+  try { const m = JSON.parse(localStorage.getItem(MIX_KEY) || 'null'); if (m && m.mix) { state.mix = m.mix; state.instruments = m.instruments || {}; state.layers = m.layers || []; } } catch (e) { /* 沒存過 */ }
+  function saveMix() { try { localStorage.setItem(MIX_KEY, JSON.stringify({ mix: state.mix, instruments: state.instruments, layers: state.layers })); } catch (e) { /* 存不了就算了 */ } }
   let song = null, arr = null;
   let songText = SONG_TEXT;
   try { const saved = localStorage.getItem(STORE_KEY); if (saved) songText = saved; } catch (e) { /* 私密視窗等情況沒有儲存空間，用原譜就好 */ }
@@ -206,7 +237,7 @@
     Band.harmonize(song);
     if (!state.style) state.style = Band.resolveStyle(song.style, song.meter);
     if (!state.lead) state.lead = Band.resolveInstrument(song.lead, Band.STYLES[state.style].lead);
-    arr = Band.arrange(song, { style: state.style, lead: state.lead, transpose: state.transpose, tempo: keepTempo ? state.tempo : null });
+    arr = Band.arrange(song, { style: state.style, lead: state.lead, transpose: state.transpose, tempo: keepTempo ? state.tempo : null, instruments: state.instruments, layers: state.layers });
     state.tempo = arr.tempo;
     renderMeta(); renderScore(); renderMixer(); syncControls();
   }
@@ -253,27 +284,85 @@
     $('pos').textContent = `0 / ${song.bars.length} 小節`;
   }
 
+  const TRACK_CHOICES = { lead: Band.LEAD_CHOICES, chords: Band.CHORD_CHOICES, bass: Band.BASS_CHOICES, pad: Band.PAD_CHOICES };
+  const KNOBS = [['volume', '音量', 0, 1, 0.02], ['pan', '左右', -1, 1, 0.05], ['tone', '音色', -1, 1, 0.05], ['reverb', '殘響', 0, 1, 0.05]];
+  function mixOf(tr) { return Band.trackParams(tr, state.mix); }
+
   function renderMixer() {
     const box = $('mixer');
     box.innerHTML = '';
-    arr.tracks.forEach((tr) => {
-      if (state.volumes[tr.id] == null) state.volumes[tr.id] = tr.volume;
+    const padOff = !arr.tracks.some((t) => t.id === 'pad');
+    const rows = arr.tracks.slice();
+    if (padOff) rows.splice(Math.min(3, rows.length), 0, { id: 'pad', name: '鋪底', inst: 'none', off: true, mix: Band.DEFAULT_MIX.pad });
+    rows.forEach((tr) => {
+      const p = mixOf(tr);
       const row = document.createElement('div');
-      row.className = 'track';
-      const label = tr.inst === 'drums' ? '鼓組' : Band.INSTRUMENTS[tr.inst].label;
-      row.innerHTML = `<div class="name">${tr.name}<small>${label}</small></div>
-        <input type="range" id="vol-${tr.id}" min="0" max="1" step="0.02" value="${state.volumes[tr.id]}" aria-label="${tr.name}音量">
-        <button class="small mute" id="mute-${tr.id}" aria-pressed="${!!state.mutes[tr.id]}">${state.mutes[tr.id] ? '已靜音' : '靜音'}</button>`;
+      row.className = 'track' + (p.mute ? ' muted' : '');
+      row.dataset.track = tr.id;
+      const choices = tr.layer ? null : TRACK_CHOICES[tr.id];
+      let instSel = '';
+      if (choices) {
+        const opts = (tr.id === 'pad' ? [['none', '不要鋪底']] : []).concat(choices.map((id) => [id, Band.INSTRUMENTS[id].label]));
+        instSel = `<select id="inst-${tr.id}" aria-label="${tr.name}樂器">${opts.map(([v, l]) => `<option value="${v}" ${v === tr.inst ? 'selected' : ''}>${l}</option>`).join('')}</select>`;
+      }
+      const label = tr.inst === 'drums' ? '鼓組' : tr.layer ? '' : '';
+      row.innerHTML = `<div class="head"><span class="name">${tr.name}<small>${label}</small></span>${instSel}</div>
+        <div class="btns">${tr.off ? '' : `<button class="small mute" id="mute-${tr.id}" aria-pressed="${!!p.mute}">${p.mute ? '已靜音' : '靜音'}</button>`}${tr.layer ? `<button class="small" id="rm-${tr.id}" aria-label="移除這軌">移除</button>` : ''}</div>
+        ${tr.off ? '' : `<div class="knobs">${KNOBS.map(([k, l, lo, hi, st]) => `<label>${l}<input type="range" id="${k}-${tr.id}" min="${lo}" max="${hi}" step="${st}" value="${p[k]}" aria-label="${tr.name}${l}"></label>`).join('')}</div>`}`;
       box.appendChild(row);
-      $(`vol-${tr.id}`).addEventListener('input', (e) => { state.volumes[tr.id] = +e.target.value; if (player.synth) player.synth.setVolume(tr.id, state.mutes[tr.id] ? 0 : state.volumes[tr.id]); });
+      if (choices) $(`inst-${tr.id}`).addEventListener('change', (e) => {
+        if (tr.id === 'lead') { state.lead = e.target.value; }
+        else state.instruments[tr.id] = e.target.value === 'none' ? null : e.target.value;
+        saveMix(); rebuild(true); restartIfPlaying();
+      });
+      if (tr.off) return;
+      KNOBS.forEach(([k]) => $(`${k}-${tr.id}`).addEventListener('input', (e) => {
+        setMix(tr.id, { [k]: +e.target.value });
+      }));
       $(`mute-${tr.id}`).addEventListener('click', (e) => {
-        state.mutes[tr.id] = !state.mutes[tr.id];
-        e.target.setAttribute('aria-pressed', state.mutes[tr.id]);
-        e.target.textContent = state.mutes[tr.id] ? '已靜音' : '靜音';
-        if (player.synth) player.synth.setVolume(tr.id, state.mutes[tr.id] ? 0 : state.volumes[tr.id]);
+        const mute = !mixOf(tr).mute;
+        setMix(tr.id, { mute });
+        e.target.setAttribute('aria-pressed', mute); e.target.textContent = mute ? '已靜音' : '靜音';
+        row.classList.toggle('muted', mute);
+      });
+      if (tr.layer) $(`rm-${tr.id}`).addEventListener('click', () => {
+        const idx = +tr.id.replace('layer', '') - 1;
+        state.layers.splice(idx, 1);
+        delete state.mix.tracks[tr.id];
+        saveMix(); rebuild(true); restartIfPlaying();
       });
     });
+    // 母帶預設
+    const mp = $('master-presets');
+    mp.innerHTML = '';
+    Object.keys(Band.MASTER_PRESETS).forEach((id) => {
+      const b = document.createElement('button');
+      b.className = 'small'; b.textContent = Band.MASTER_PRESETS[id].label;
+      b.setAttribute('aria-pressed', state.mix.master === id);
+      b.addEventListener('click', () => { state.mix.master = id; saveMix(); if (player.synth) player.synth.setMaster(id); mp.querySelectorAll('button').forEach((x) => x.setAttribute('aria-pressed', x === b)); });
+      mp.appendChild(b);
+    });
   }
+  function setMix(id, patch) {
+    state.mix.tracks[id] = Object.assign({}, state.mix.tracks[id], patch);
+    saveMix();
+    if (player.synth) { const tr = arr.tracks.find((t) => t.id === id); if (tr) player.synth.setTrack(id, mixOf(tr)); }
+  }
+  // 加一軌
+  const layerInst = $('layer-inst'), layerPat = $('layer-pattern');
+  ['piano', 'epiano', 'guitar', 'flute', 'musicbox', 'synth', 'strings', 'pad'].forEach((id) => { const o = document.createElement('option'); o.value = id; o.textContent = Band.INSTRUMENTS[id].label; layerInst.appendChild(o); });
+  Object.keys(Band.LAYER_PATTERNS).forEach((id) => { const o = document.createElement('option'); o.value = id; o.textContent = Band.LAYER_PATTERNS[id].label; layerPat.appendChild(o); });
+  layerInst.value = 'strings';
+  $('layer-role').addEventListener('change', (e) => { layerPat.hidden = e.target.value === 'lead'; });
+  $('layer-add').addEventListener('click', () => {
+    if (state.layers.length >= 4) { $('edit-status').textContent = ''; return; }
+    state.layers.push({ role: $('layer-role').value, inst: layerInst.value, pattern: layerPat.value, octave: +$('layer-oct').value });
+    saveMix(); rebuild(true); restartIfPlaying();
+  });
+  $('mix-reset').addEventListener('click', () => {
+    state.mix = { tracks: {}, master: 'natural' }; state.instruments = {}; state.layers = []; state.lead = null;
+    saveMix(); rebuild(true); restartIfPlaying();
+  });
 
   function syncControls() {
     $('tempo').value = arr.tempo; $('tempo-out').value = arr.tempo;
@@ -297,13 +386,11 @@
     stop(true);
     const ctx = ensureCtx();
     const spb = 60 / arr.tempo;
-    player.synth = new Band.Synth(ctx, { reverb: arr.reverb });
-    const vols = {};
-    arr.tracks.forEach((tr) => { vols[tr.id] = state.mutes[tr.id] ? 0 : state.volumes[tr.id]; });
+    player.synth = new Band.Synth(ctx, { reverb: arr.reverb, master: state.mix.master });
     player.startBeat = fromBeat || 0;
     player.startTime = ctx.currentTime + 0.12;
     player.passes = 0;
-    schedulePass(player.startTime - player.startBeat * spb, vols);
+    schedulePass(player.startTime - player.startBeat * spb);
     player.playing = true;
     $('play').dataset.playing = 'true';
     $('play').textContent = '■ 停止';
@@ -311,12 +398,12 @@
   }
 
   // 一次把整段排進 WebAudio；循環的話快結束時再排下一輪
-  function schedulePass(origin, vols) {
+  function schedulePass(origin) {
     const ctx = player.ctx, spb = 60 / arr.tempo;
     const synth = player.synth;
     const skipBefore = player.passes === 0 ? player.startBeat : 0;
     for (const tr of arr.tracks) {
-      const dest = synth.track(tr.id, vols[tr.id]);
+      const dest = synth.track(tr.id, mixOf(tr));
       for (const e of tr.events) {
         if (e.t + e.dur <= skipBefore) continue;
         const t = origin + e.t * spb + (e.off || 0);
@@ -329,7 +416,7 @@
     clearTimeout(player.loopTimer);
     player.loopTimer = setTimeout(() => {
       if (!player.playing) return;
-      if (state.loop) { player.passes++; player.startBeat = 0; schedulePass(endTime, vols); }
+      if (state.loop) { player.passes++; player.startBeat = 0; schedulePass(endTime); }
       else player.loopTimer = setTimeout(() => stop(), (endTime - ctx.currentTime) * 1000 + 1200);
     }, Math.max(0, (endTime - ctx.currentTime) * 1000 - 800));
   }
@@ -440,11 +527,12 @@
       try { dl = await Promise.race([window.claude.use('downloads'), new Promise((r) => setTimeout(() => r(null), 4000))]); } catch (e) { dl = null; }
     }
     if (dl) {
-      const zip = Band.makeZip([{ name: filename, data: bytes }]);
-      const zipName = filename.replace(/\.[^.]+$/, '') + '.zip';
+      const isZip = /\.zip$/i.test(filename);
+      const zip = isZip ? bytes : Band.makeZip([{ name: filename, data: bytes }]);
+      const zipName = isZip ? filename : filename.replace(/\.[^.]+$/, '') + '.zip';
       try {
         await dl.save({ filename: zipName, data: new Blob([zip], { type: 'application/zip' }) });
-        status.textContent = `已存成 ${zipName}，解壓縮後就是 ${filename}`; status.className = 'status ok';
+        status.textContent = isZip ? `已存成 ${zipName}` : `已存成 ${zipName}，解壓縮後就是 ${filename}`; status.className = 'status ok';
       } catch (e) {
         if (e && e.code === 'declined') { status.textContent = '已取消'; status.className = 'status'; }
         else { status.textContent = '這裡存不了檔案。把這個頁面另存成 .html，用電腦的瀏覽器打開再下載'; status.className = 'status warn'; }
@@ -460,17 +548,29 @@
     status.textContent = `已產生 ${filename}（${Math.round(bytes.length / 1024)} KB）。如果沒看到下載，請把這個頁面另存成 .html 後用電腦瀏覽器打開`;
     status.className = 'status ok';
   }
-  const fileBase = () => (song.title || SONG_NAME).replace(/[\\/:*?"<>|]+/g, '_');
-  $('dl-midi').addEventListener('click', () => offerFile(`${fileBase()}.mid`, Band.toMidi(arr, song), 'audio/midi'));
+  const fileBase = () => SONG_NAME.replace(/[\\/:*?"<>|]+/g, '_'); // 檔名用建置時的英文名，中文檔名在某些瀏覽器會被改掉
+  $('dl-midi').addEventListener('click', () => offerFile(`${fileBase()}.mid`, Band.toMidi(arr, song, state.mix), 'audio/midi'));
   $('dl-wav').addEventListener('click', async () => {
     const btn = $('dl-wav'), status = $('dl-status');
     btn.disabled = true;
     status.textContent = '正在錄音…'; status.className = 'status';
     try {
-      const wav = await Band.renderWav(arr, state.mutes, state.volumes);
+      const wav = await Band.renderWav(arr, state.mix);
       await offerFile(`${fileBase()}.wav`, wav, 'audio/wav');
     } catch (e) {
       status.textContent = '錄音失敗：' + (e && e.message ? e.message : e); status.className = 'status warn';
+    }
+    btn.disabled = false;
+  });
+  $('dl-stems').addEventListener('click', async () => {
+    const btn = $('dl-stems'), status = $('dl-status');
+    btn.disabled = true;
+    try {
+      const stems = await Band.renderStems(arr, state.mix, (tr, i, n) => { status.textContent = `正在錄 ${tr.name}（${i + 1}/${n}）…`; status.className = 'status'; });
+      const zip = Band.makeZip(stems.map((f) => ({ name: `${fileBase()}/${f.name}`, data: f.data })));
+      await offerFile(`${fileBase()}-stems.zip`, zip, 'application/zip');
+    } catch (e) {
+      status.textContent = '分軌失敗：' + (e && e.message ? e.message : e); status.className = 'status warn';
     }
     btn.disabled = false;
   });
