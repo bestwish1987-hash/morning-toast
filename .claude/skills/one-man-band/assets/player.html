@@ -1,0 +1,481 @@
+<title>__TITLE__</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@600;700&family=Noto+Sans+TC:wght@400;500;700&family=JetBrains+Mono:wght@500;700&display=swap">
+<style>
+  :root {
+    --bg: #F3EFE4; --surface: #FFFDF8; --ink: #1B1A17; --muted: #736D60; --line: #DDD6C6;
+    --accent: #A63A2E; --accent-ink: #FFFFFF; --accent-soft: #F5E3DF; --brass: #B8862B; --brass-soft: #F7EAC8;
+    --ok: #2E7D5B; --warn: #9A6B12; --shadow: 0 1px 2px rgba(40, 30, 10, .08), 0 6px 20px rgba(40, 30, 10, .06);
+    --serif: "Noto Serif TC", "Songti TC", "PMingLiU", serif;
+    --sans: "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", system-ui, sans-serif;
+    --mono: "JetBrains Mono", ui-monospace, Menlo, Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      color-scheme: dark;
+      --bg: #141416; --surface: #1E1E22; --ink: #EDE8DC; --muted: #A19B8E; --line: #33333A;
+      --accent: #E0705F; --accent-ink: #1B1A17; --accent-soft: #3A2320; --brass: #E2B95C; --brass-soft: #3D3320;
+      --ok: #6CC49A; --warn: #E0B04E; --shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 6px 20px rgba(0, 0, 0, .3);
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --bg: #141416; --surface: #1E1E22; --ink: #EDE8DC; --muted: #A19B8E; --line: #33333A;
+    --accent: #E0705F; --accent-ink: #1B1A17; --accent-soft: #3A2320; --brass: #E2B95C; --brass-soft: #3D3320;
+    --ok: #6CC49A; --warn: #E0B04E; --shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 6px 20px rgba(0, 0, 0, .3);
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--sans); font-size: 15px; line-height: 1.55; }
+  .wrap { max-width: 820px; margin: 0 auto; padding-block: 20px 56px; padding-inline: 16px; display: grid; gap: 22px; }
+  h1, h2, h3 { margin: 0; text-wrap: balance; }
+  h1 { font-family: var(--serif); font-weight: 700; font-size: clamp(30px, 6vw, 44px); line-height: 1.15; letter-spacing: .01em; }
+  h2 { font-size: 13px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
+  .eyebrow { font-size: 12px; letter-spacing: .18em; color: var(--accent); font-weight: 700; }
+  .meta { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+  .pill { font-family: var(--mono); font-size: 12.5px; padding: 3px 10px; border: 1px solid var(--line); border-radius: 999px; color: var(--muted); background: var(--surface); font-variant-numeric: tabular-nums; }
+  .pill b { color: var(--ink); font-weight: 700; }
+
+  /* 播放列 */
+  .transport { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--surface); border: 1px solid var(--line); border-radius: 14px; box-shadow: var(--shadow); padding: 12px 14px; display: grid; gap: 10px; }
+  .row { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+  .play { appearance: none; border: 0; border-radius: 999px; background: var(--accent); color: var(--accent-ink); font: 700 16px var(--sans); padding: 12px 22px; min-width: 128px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 8px; }
+  .play:focus-visible, button:focus-visible, select:focus-visible, input:focus-visible, textarea:focus-visible { outline: 3px solid var(--brass); outline-offset: 2px; }
+  .play[data-playing="true"] { background: var(--ink); color: var(--bg); }
+  .pos { font-family: var(--mono); font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; min-width: 9ch; }
+  .progress { height: 6px; background: var(--line); border-radius: 999px; overflow: hidden; flex: 1 1 140px; }
+  .progress i { display: block; height: 100%; width: 0; background: var(--brass); transition: width .08s linear; }
+  @media (prefers-reduced-motion: reduce) { .progress i { transition: none; } }
+  .controls { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px 14px; }
+  label.field { display: grid; gap: 4px; font-size: 12px; color: var(--muted); font-weight: 500; }
+  select, input[type="range"], button.small, textarea { font-family: inherit; font-size: 14px; color: var(--ink); }
+  select { padding: 7px 9px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); width: 100%; }
+  input[type="range"] { width: 100%; accent-color: var(--accent); margin: 6px 0; }
+  .stepper { display: flex; align-items: center; gap: 6px; }
+  .stepper output { font-family: var(--mono); min-width: 5ch; text-align: center; font-variant-numeric: tabular-nums; }
+  button.small { appearance: none; border: 1px solid var(--line); background: var(--surface); border-radius: 8px; padding: 6px 12px; cursor: pointer; }
+  button.small:hover { border-color: var(--ink); }
+  button.small[aria-pressed="true"] { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+  button:disabled { opacity: .5; cursor: default; }
+  .check { display: flex; align-items: center; gap: 8px; font-size: 14px; color: var(--ink); padding-top: 16px; }
+  .check input { accent-color: var(--accent); width: 18px; height: 18px; }
+
+  /* 簡譜 */
+  .score { display: flex; flex-wrap: wrap; gap: 6px 0; align-items: flex-end; }
+  .bar { display: grid; grid-template-rows: 18px auto 20px; align-items: end; padding: 6px 10px 4px 10px; border-left: 2px solid var(--line); cursor: pointer; border-radius: 6px 6px 0 0; }
+  .bar:hover { background: var(--surface); }
+  .bar.on { border-left-color: var(--brass); background: var(--surface); }
+  .bar:last-child { border-right: 4px double var(--line); }
+  .chord { font-family: var(--mono); font-size: 12.5px; color: var(--accent); font-weight: 700; display: flex; gap: 12px; align-self: start; }
+  .chord i { font-style: normal; }
+  .chord i.auto { opacity: .8; }
+  .notes { display: flex; gap: 6px; align-items: flex-end; }
+  .tok { display: inline-grid; grid-template-rows: 8px auto 8px; justify-items: center; font-family: var(--mono); font-weight: 700; font-size: 22px; line-height: 1.1; padding: 0 3px; border-radius: 5px; font-variant-numeric: tabular-nums; }
+  .tok .dots { font-size: 8px; line-height: 8px; letter-spacing: -1px; color: var(--ink); }
+  .tok .g { display: inline-block; }
+  .tok .g.u1 { text-decoration: underline; text-underline-offset: 3px; text-decoration-thickness: 1.5px; }
+  .tok .g.u2 { text-decoration: underline double; text-underline-offset: 3px; text-decoration-thickness: 1.5px; }
+  .tok.dash { color: var(--muted); font-weight: 500; }
+  .tok.on { background: var(--brass-soft); color: var(--accent); }
+  .tok.on .dots { color: var(--accent); }
+  .lyrics { display: flex; gap: 6px; align-items: baseline; font-size: 12px; color: var(--muted); }
+  .lyrics span { display: inline-block; text-align: center; padding: 0 3px; }
+  .warn { color: var(--warn); font-size: 13px; margin: 0; padding-left: 18px; }
+  .hint { font-size: 12.5px; color: var(--muted); margin: 0; }
+
+  /* 混音 */
+  .mixer { display: grid; gap: 8px; }
+  .track { display: grid; grid-template-columns: 96px 1fr 62px; align-items: center; gap: 10px; }
+  .track .name { font-size: 14px; }
+  .track .name small { display: block; color: var(--muted); font-size: 11.5px; }
+  .track button.mute { justify-self: end; min-width: 56px; }
+
+  /* 匯出、編輯 */
+  .card { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 16px; display: grid; gap: 12px; }
+  .actions { display: flex; flex-wrap: wrap; gap: 10px; }
+  .status { font-size: 13px; color: var(--muted); min-height: 1.4em; }
+  .status.ok { color: var(--ok); }
+  .status.warn { color: var(--warn); }
+  details summary { cursor: pointer; font-weight: 700; font-size: 14px; }
+  textarea { width: 100%; min-height: 200px; padding: 10px; border: 1px solid var(--line); border-radius: 10px; background: var(--bg); font-family: var(--mono); font-size: 14px; line-height: 1.6; resize: vertical; }
+  .help { font-size: 13.5px; color: var(--ink); display: grid; gap: 6px; }
+  .help code { font-family: var(--mono); background: var(--bg); padding: 1px 6px; border-radius: 5px; font-size: 12.5px; }
+  .help table { border-collapse: collapse; width: 100%; font-size: 13px; }
+  .help td { padding: 4px 6px; border-top: 1px solid var(--line); vertical-align: top; }
+  .help td:first-child { font-family: var(--mono); white-space: nowrap; width: 9ch; }
+  .foot { font-size: 12px; color: var(--muted); }
+</style>
+
+<div class="wrap">
+  <header>
+    <div class="eyebrow">一人樂團 · ONE-MAN BAND</div>
+    <h1 id="title">__TITLE__</h1>
+    <div class="meta" id="meta"></div>
+  </header>
+
+  <section class="transport" aria-label="播放">
+    <div class="row">
+      <button class="play" id="play" data-playing="false" aria-label="播放">▶ 播放</button>
+      <span class="pos" id="pos">0 / 0 小節</span>
+      <div class="progress" aria-hidden="true"><i id="bar-progress"></i></div>
+    </div>
+    <div class="controls">
+      <label class="field">曲風
+        <select id="style"></select>
+      </label>
+      <label class="field">主奏樂器
+        <select id="lead"></select>
+      </label>
+      <label class="field"><span>速度 <output id="tempo-out">90</output> BPM</span>
+        <input type="range" id="tempo" min="40" max="200" step="1" value="90">
+      </label>
+      <div class="field">
+        <span>移調 <output id="key-out">C</output></span>
+        <div class="stepper">
+          <button class="small" id="tr-down" aria-label="降半音">−</button>
+          <output id="tr-out">0</output>
+          <button class="small" id="tr-up" aria-label="升半音">＋</button>
+        </div>
+      </div>
+      <label class="check"><input type="checkbox" id="loop"> 循環播放</label>
+    </div>
+  </section>
+
+  <section>
+    <h2>簡譜 <span class="hint" style="text-transform:none;letter-spacing:0">點任一小節從那裡開始播</span></h2>
+    <div class="score" id="score"></div>
+    <ul id="warnings" hidden></ul>
+  </section>
+
+  <section>
+    <h2>樂器</h2>
+    <div class="mixer" id="mixer"></div>
+  </section>
+
+  <section class="card">
+    <h2>帶走</h2>
+    <div class="actions">
+      <button class="small" id="dl-midi">下載 MIDI</button>
+      <button class="small" id="dl-wav">錄成 WAV 音檔</button>
+    </div>
+    <div class="status" id="dl-status"></div>
+    <p class="hint">MIDI 可以丟進 GarageBand、Logic、Cubase 換成真實音色；WAV 是這個頁面現在的聲音，可以直接上傳到 Suno 之類的服務再加人聲。</p>
+  </section>
+
+  <details class="card" id="editor">
+    <summary>改譜、貼新的譜</summary>
+    <textarea id="song-text" spellcheck="false" aria-label="簡譜"></textarea>
+    <div class="actions">
+      <button class="small" id="apply">套用</button>
+      <button class="small" id="reset">還原原譜</button>
+      <span class="status" id="edit-status"></span>
+    </div>
+    <div class="help">
+      <table>
+        <tr><td>1 – 7</td><td>音名（Do Re Mi Fa Sol La Si），<code>0</code> 是休止符，每個預設一拍，空白隔開</td></tr>
+        <tr><td>-</td><td>延長前一個音一拍：<code>5 - - -</code> 是四拍</td></tr>
+        <tr><td>1_ 1__</td><td>一條底線半拍、兩條四分之一拍</td></tr>
+        <tr><td>1.</td><td>附點：一拍半（<code>1_.</code> 是 ¾ 拍）</td></tr>
+        <tr><td>1' 1,</td><td>高八度 / 低八度，可以疊：<code>1''</code></td></tr>
+        <tr><td>#4 b7</td><td>升 / 降</td></tr>
+        <tr><td>|</td><td>小節線</td></tr>
+        <tr><td>[C]</td><td>寫在音前面指定和弦，例如 <code>[Am]6 1' 3'</code>；不寫就自動配</td></tr>
+        <tr><td>調: G</td><td>抬頭：<code>調</code>、<code>拍</code>（4/4、3/4）、<code>速度</code>、<code>曲風</code>、<code>主奏</code>、<code>和弦</code>（一小節一個）、<code>詞</code></td></tr>
+      </table>
+    </div>
+  </details>
+
+  <p class="foot">聲音全部由瀏覽器即時合成，沒有載入任何音色檔；手機請先關靜音鍵。</p>
+</div>
+
+<script id="band-js">/*__BAND_JS__*/</script>
+<script>
+(function () {
+  'use strict';
+  const SONG_TEXT = /*__SONG__*/"";
+  const SONG_NAME = /*__NAME__*/"song";
+  const $ = (id) => document.getElementById(id);
+  const STORE_KEY = 'one-man-band:' + SONG_NAME;
+
+  const state = { style: null, lead: null, tempo: null, transpose: 0, loop: false, mutes: {}, volumes: {} };
+  let song = null, arr = null;
+  let songText = SONG_TEXT;
+  try { const saved = localStorage.getItem(STORE_KEY); if (saved) songText = saved; } catch (e) { /* 私密視窗等情況沒有儲存空間，用原譜就好 */ }
+
+  // ───────── 建譜 ─────────
+  function rebuild(keepTempo) {
+    song = Band.parseSong(songText);
+    Band.harmonize(song);
+    if (!state.style) state.style = Band.resolveStyle(song.style, song.meter);
+    if (!state.lead) state.lead = Band.resolveInstrument(song.lead, Band.STYLES[state.style].lead);
+    arr = Band.arrange(song, { style: state.style, lead: state.lead, transpose: state.transpose, tempo: keepTempo ? state.tempo : null });
+    state.tempo = arr.tempo;
+    renderMeta(); renderScore(); renderMixer(); syncControls();
+  }
+
+  function renderMeta() {
+    const title = song.title || SONG_NAME;
+    document.title = title;
+    $('title').textContent = title;
+    $('meta').innerHTML = [
+      `調 <b>${arr.keyName}</b>`, `拍 <b>${song.meter.num}/${song.meter.den}</b>`, `<b>${arr.tempo}</b> BPM`,
+      `${song.bars.length} 小節`, `${Band.STYLES[arr.style].label}`,
+    ].map((s) => `<span class="pill">${s}</span>`).join('');
+  }
+
+  function renderScore() {
+    const box = $('score');
+    box.innerHTML = '';
+    let idx = 0;
+    const idxOf = new Map();
+    song.bars.forEach((bar) => bar.notes.forEach((n) => { if (!n.rest) idxOf.set(n, idx++); }));
+    song.bars.forEach((bar) => {
+      const el = document.createElement('div');
+      el.className = 'bar';
+      el.dataset.bar = bar.index;
+      el.title = `第 ${bar.index + 1} 小節，從這裡播`;
+      const chords = bar.chords.slice().sort((a, b) => a.beat - b.beat)
+        .map((c) => `<i class="${c.auto ? 'auto' : ''}" title="${c.auto ? '自動配的和弦' : '譜上指定的和弦'}">${esc(c.chord.symbol)}</i>`).join('');
+      const notes = bar.tokens.map((tk) => {
+        const n = tk.note;
+        const i = n.rest ? -1 : idxOf.get(n);
+        if (tk.kind === 'dash') return `<span class="tok dash" data-i="${i}"><span class="dots"></span><span class="g">–</span><span class="dots"></span></span>`;
+        const g = Band.noteGlyph(n);
+        const under = n.under >= 2 ? 'u2' : n.under === 1 ? 'u1' : '';
+        return `<span class="tok" data-i="${i}"><span class="dots">${'•'.repeat(g.up)}</span><span class="g ${under}">${g.text}${n.dotted ? '·' : ''}</span><span class="dots">${'•'.repeat(g.down)}</span></span>`;
+      }).join('');
+      const lyrics = bar.tokens.map((tk) => `<span>${tk.kind === 'note' && tk.note.lyric ? esc(tk.note.lyric) : ''}</span>`).join('');
+      el.innerHTML = `<div class="chord">${chords}</div><div class="notes">${notes}</div><div class="lyrics">${lyrics}</div>`;
+      el.addEventListener('click', () => play(bar.start));
+      box.appendChild(el);
+    });
+    const w = $('warnings');
+    w.innerHTML = song.warnings.map((s) => `<li class="warn">${esc(s)}</li>`).join('');
+    w.hidden = !song.warnings.length;
+    $('pos').textContent = `0 / ${song.bars.length} 小節`;
+  }
+
+  function renderMixer() {
+    const box = $('mixer');
+    box.innerHTML = '';
+    arr.tracks.forEach((tr) => {
+      if (state.volumes[tr.id] == null) state.volumes[tr.id] = tr.volume;
+      const row = document.createElement('div');
+      row.className = 'track';
+      const label = tr.inst === 'drums' ? '鼓組' : Band.INSTRUMENTS[tr.inst].label;
+      row.innerHTML = `<div class="name">${tr.name}<small>${label}</small></div>
+        <input type="range" id="vol-${tr.id}" min="0" max="1" step="0.02" value="${state.volumes[tr.id]}" aria-label="${tr.name}音量">
+        <button class="small mute" id="mute-${tr.id}" aria-pressed="${!!state.mutes[tr.id]}">${state.mutes[tr.id] ? '已靜音' : '靜音'}</button>`;
+      box.appendChild(row);
+      $(`vol-${tr.id}`).addEventListener('input', (e) => { state.volumes[tr.id] = +e.target.value; if (player.synth) player.synth.setVolume(tr.id, state.mutes[tr.id] ? 0 : state.volumes[tr.id]); });
+      $(`mute-${tr.id}`).addEventListener('click', (e) => {
+        state.mutes[tr.id] = !state.mutes[tr.id];
+        e.target.setAttribute('aria-pressed', state.mutes[tr.id]);
+        e.target.textContent = state.mutes[tr.id] ? '已靜音' : '靜音';
+        if (player.synth) player.synth.setVolume(tr.id, state.mutes[tr.id] ? 0 : state.volumes[tr.id]);
+      });
+    });
+  }
+
+  function syncControls() {
+    $('tempo').value = arr.tempo; $('tempo-out').value = arr.tempo;
+    $('key-out').value = arr.keyName; $('tr-out').value = (state.transpose > 0 ? '+' : '') + state.transpose;
+    $('style').value = arr.style; $('lead').value = arr.lead;
+    $('song-text').value = songText;
+  }
+
+  function esc(s) { return String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
+
+  // ───────── 播放 ─────────
+  const player = { ctx: null, synth: null, startTime: 0, startBeat: 0, playing: false, raf: 0, loopTimer: 0, passes: 0 };
+
+  function ensureCtx() {
+    if (!player.ctx) player.ctx = new (window.AudioContext || window.webkitAudioContext)();
+    if (player.ctx.state === 'suspended') player.ctx.resume();
+    return player.ctx;
+  }
+
+  function play(fromBeat) {
+    stop(true);
+    const ctx = ensureCtx();
+    const spb = 60 / arr.tempo;
+    player.synth = new Band.Synth(ctx, { reverb: arr.reverb });
+    const vols = {};
+    arr.tracks.forEach((tr) => { vols[tr.id] = state.mutes[tr.id] ? 0 : state.volumes[tr.id]; });
+    player.startBeat = fromBeat || 0;
+    player.startTime = ctx.currentTime + 0.12;
+    player.passes = 0;
+    schedulePass(player.startTime - player.startBeat * spb, vols);
+    player.playing = true;
+    $('play').dataset.playing = 'true';
+    $('play').textContent = '■ 停止';
+    tick();
+  }
+
+  // 一次把整段排進 WebAudio；循環的話快結束時再排下一輪
+  function schedulePass(origin, vols) {
+    const ctx = player.ctx, spb = 60 / arr.tempo;
+    const synth = player.synth;
+    const skipBefore = player.passes === 0 ? player.startBeat : 0;
+    for (const tr of arr.tracks) {
+      const dest = synth.track(tr.id, vols[tr.id]);
+      for (const e of tr.events) {
+        if (e.t + e.dur <= skipBefore) continue;
+        const t = origin + e.t * spb + (e.off || 0);
+        if (t < ctx.currentTime) continue;
+        synth.play(tr.inst, e.note, t, e.dur * spb, e.vel, dest);
+      }
+    }
+    const endTime = origin + arr.totalBeats * spb;
+    player.passEnd = endTime;
+    clearTimeout(player.loopTimer);
+    player.loopTimer = setTimeout(() => {
+      if (!player.playing) return;
+      if (state.loop) { player.passes++; player.startBeat = 0; schedulePass(endTime, vols); }
+      else player.loopTimer = setTimeout(() => stop(), (endTime - ctx.currentTime) * 1000 + 1200);
+    }, Math.max(0, (endTime - ctx.currentTime) * 1000 - 800));
+  }
+
+  function stop(silent) {
+    clearTimeout(player.loopTimer);
+    cancelAnimationFrame(player.raf);
+    if (player.synth) {
+      const s = player.synth, ctx = player.ctx;
+      s.master.gain.setTargetAtTime(0, ctx.currentTime, 0.02);
+      setTimeout(() => { try { s.master.disconnect(); s.reverbGain.disconnect(); s.comp.disconnect(); } catch (e) { /* 已經斷開 */ } }, 150);
+      player.synth = null;
+    }
+    player.playing = false;
+    $('play').dataset.playing = 'false';
+    $('play').textContent = '▶ 播放';
+    if (!silent) highlight(-1);
+  }
+
+  function currentBeat() {
+    const spb = 60 / arr.tempo;
+    let beat = player.startBeat + (player.ctx.currentTime - player.startTime) / spb;
+    if (beat >= arr.totalBeats) beat = state.loop ? beat % arr.totalBeats : arr.totalBeats;
+    return beat;
+  }
+
+  function tick() {
+    if (!player.playing) return;
+    const beat = currentBeat();
+    if (beat >= 0) {
+      let i = -1;
+      const notes = arr.leadNotes;
+      let lo = 0, hi = notes.length - 1;
+      while (lo <= hi) { const mid = (lo + hi) >> 1; if (notes[mid].start <= beat + 1e-6) { i = mid; lo = mid + 1; } else hi = mid - 1; }
+      if (i >= 0 && beat >= notes[i].start + notes[i].beats) i = -1;
+      highlight(i, beat);
+    }
+    player.raf = requestAnimationFrame(tick);
+  }
+
+  let lastHi = -2, lastBar = -1;
+  function highlight(i, beat) {
+    if (i !== lastHi) {
+      document.querySelectorAll('.tok.on').forEach((el) => el.classList.remove('on'));
+      if (i >= 0) document.querySelectorAll(`.tok[data-i="${i}"]`).forEach((el) => el.classList.add('on'));
+      lastHi = i;
+    }
+    let b = -1;
+    if (beat != null && beat >= 0) for (const bar of song.bars) if (bar.start <= beat + 1e-6) b = bar.index;
+    if (b !== lastBar) {
+      document.querySelectorAll('.bar.on').forEach((el) => el.classList.remove('on'));
+      if (b >= 0) { const el = document.querySelector(`.bar[data-bar="${b}"]`); if (el) { el.classList.add('on'); el.scrollIntoView({ block: 'nearest', inline: 'nearest' }); } }
+      lastBar = b;
+      $('pos').textContent = `${b + 1} / ${song.bars.length} 小節`;
+    }
+    $('bar-progress').style.width = beat == null || beat < 0 ? '0' : `${Math.min(100, (beat / arr.totalBeats) * 100)}%`;
+  }
+
+  // 改了速度、移調、曲風：從目前位置重新開始
+  function restartIfPlaying() {
+    if (!player.playing) return;
+    const beat = Math.max(0, currentBeat());
+    play(beat);
+  }
+
+  // ───────── 控制列 ─────────
+  $('play').addEventListener('click', () => { if (player.playing) stop(); else play(0); });
+  $('tempo').addEventListener('input', (e) => { state.tempo = +e.target.value; $('tempo-out').value = state.tempo; });
+  $('tempo').addEventListener('change', () => { rebuild(true); restartIfPlaying(); });
+  $('tr-down').addEventListener('click', () => { state.transpose = Math.max(-12, state.transpose - 1); rebuild(true); restartIfPlaying(); });
+  $('tr-up').addEventListener('click', () => { state.transpose = Math.min(12, state.transpose + 1); rebuild(true); restartIfPlaying(); });
+  $('loop').addEventListener('change', (e) => { state.loop = e.target.checked; });
+  Object.keys(Band.STYLES).forEach((id) => { const o = document.createElement('option'); o.value = id; o.textContent = Band.STYLES[id].label; $('style').appendChild(o); });
+  Band.LEAD_CHOICES.forEach((id) => { const o = document.createElement('option'); o.value = id; o.textContent = Band.INSTRUMENTS[id].label; $('lead').appendChild(o); });
+  $('style').addEventListener('change', (e) => { state.style = e.target.value; state.lead = Band.STYLES[state.style].lead; state.tempo = null; rebuild(false); restartIfPlaying(); });
+  $('lead').addEventListener('change', (e) => { state.lead = e.target.value; rebuild(true); restartIfPlaying(); });
+
+  // ───────── 編輯譜 ─────────
+  $('apply').addEventListener('click', () => {
+    const text = $('song-text').value;
+    const test = Band.parseSong(text);
+    if (!test.bars.length) { $('edit-status').textContent = '沒讀到任何音符，檢查一下譜'; $('edit-status').className = 'status warn'; return; }
+    songText = text;
+    try { localStorage.setItem(STORE_KEY, text); } catch (e) { /* 存不了就算了 */ }
+    state.style = null; state.lead = null; state.tempo = null;
+    stop();
+    rebuild(false);
+    $('edit-status').textContent = test.warnings.length ? `已套用，有 ${test.warnings.length} 個提醒（見譜下方）` : '已套用';
+    $('edit-status').className = 'status ok';
+  });
+  $('reset').addEventListener('click', () => {
+    songText = SONG_TEXT;
+    try { localStorage.removeItem(STORE_KEY); } catch (e) { /* 沒有儲存空間 */ }
+    state.style = null; state.lead = null; state.tempo = null; state.transpose = 0;
+    stop();
+    rebuild(false);
+    $('edit-status').textContent = '已還原';
+    $('edit-status').className = 'status ok';
+  });
+
+  // ───────── 匯出 ─────────
+  // 在 Claude 的 artifact 檢視器裡，頁面自己觸發的下載會被擋，要走 downloads 能力，而且只准 .zip 這類副檔名，
+  // 所以 .mid / .wav 會包成 zip；直接用瀏覽器開這個 html 檔的話就是一般下載。
+  async function offerFile(filename, bytes, mime) {
+    const status = $('dl-status');
+    let dl = null;
+    if (window.claude && typeof window.claude.use === 'function') {
+      try { dl = await Promise.race([window.claude.use('downloads'), new Promise((r) => setTimeout(() => r(null), 4000))]); } catch (e) { dl = null; }
+    }
+    if (dl) {
+      const zip = Band.makeZip([{ name: filename, data: bytes }]);
+      const zipName = filename.replace(/\.[^.]+$/, '') + '.zip';
+      try {
+        await dl.save({ filename: zipName, data: new Blob([zip], { type: 'application/zip' }) });
+        status.textContent = `已存成 ${zipName}，解壓縮後就是 ${filename}`; status.className = 'status ok';
+      } catch (e) {
+        if (e && e.code === 'declined') { status.textContent = '已取消'; status.className = 'status'; }
+        else { status.textContent = '這裡存不了檔案。把這個頁面另存成 .html，用電腦的瀏覽器打開再下載'; status.className = 'status warn'; }
+      }
+      return;
+    }
+    const blob = new Blob([bytes], { type: mime });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = filename;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 4000);
+    status.textContent = `已產生 ${filename}（${Math.round(bytes.length / 1024)} KB）。如果沒看到下載，請把這個頁面另存成 .html 後用電腦瀏覽器打開`;
+    status.className = 'status ok';
+  }
+  const fileBase = () => (song.title || SONG_NAME).replace(/[\\/:*?"<>|]+/g, '_');
+  $('dl-midi').addEventListener('click', () => offerFile(`${fileBase()}.mid`, Band.toMidi(arr, song), 'audio/midi'));
+  $('dl-wav').addEventListener('click', async () => {
+    const btn = $('dl-wav'), status = $('dl-status');
+    btn.disabled = true;
+    status.textContent = '正在錄音…'; status.className = 'status';
+    try {
+      const wav = await Band.renderWav(arr, state.mutes, state.volumes);
+      await offerFile(`${fileBase()}.wav`, wav, 'audio/wav');
+    } catch (e) {
+      status.textContent = '錄音失敗：' + (e && e.message ? e.message : e); status.className = 'status warn';
+    }
+    btn.disabled = false;
+  });
+
+  rebuild(false);
+  window.__band = { get song() { return song; }, get arr() { return arr; }, play, stop, state };
+})();
+</script>

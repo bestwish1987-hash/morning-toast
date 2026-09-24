@@ -28,3 +28,6 @@ npm-debug.log*
 # 暫存
 tmp/
 temp/
+
+# one-man-band skill 的本地輸出
+one-man-band-out/
